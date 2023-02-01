@@ -4,7 +4,9 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require('ejs');
 const mongoose = require('mongoose');
-const encrypt = require('mongoose-encryption');
+const bcrypt = require('bcryptjs');
+const saltRounds = 5;
+
 mongoose.set('strictQuery', true);
 app = express();
 
@@ -14,15 +16,13 @@ app.set("view engine", "ejs");
 app.use(bodyParser.urlencoded({ extended : true}));
 
 
-mongoose.connect("mongodb://localhost:27017/userDB");
+// mongoose.connect("mongodb://localhost:27017/userDB");
+mongoose.connect("mongodb://127.0.0.1:27017/userDB");
 
 const userSchema = new mongoose.Schema({
     email : String,
     password : String
 });
-
-
-userSchema.plugin(encrypt, {encryptionKey: process.env.S3_BUCKET, signingKey: process.env.SECRET_KEY, encryptedFields: ['password'] });
 
 const userModel = new mongoose.model("users", userSchema);
 
@@ -38,17 +38,19 @@ app.get("/register", (req,res)=>{
 
 app.post('/register', (req,res)=>{
 
-    const  newUser = new userModel({
-     email : req.body.username,
-     password : req.body.password
-    });
+    bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
 
-    newUser.save( (err, result)=>{
-        if (!err){
-            res.render("secrets");
-        }else {
-            res.send(err);
-        }
+        const  newUser = new userModel({
+            email : req.body.username,
+            password : hash
+        });
+        newUser.save( (err, result)=>{
+            if (!err){
+                res.render("secrets");
+            }else {
+                res.send(err);
+            }
+        });
     });
 });
 
@@ -60,19 +62,18 @@ app.listen(3000, function () {
 app.post('/login', (req,res)=>{
     const getemail = req.body.username;
     const getpassword = req.body.password;
-    
-    userModel.findOne({email : getemail}, (err,result)=>{
+
+    userModel.findOne({email : getemail}, (err,foundUser)=>{
         if (err){
             console.log(err);
         }else{
-            if (result){
-                if (result.password === getpassword && result.email === getemail)
-                {
-                    res.render("secrets");
-                }else{
-                    res.send(" recheckk your password");
-                    console.log(result.username + " "+ result.password);
-                }
+            if (foundUser){
+                bcrypt.compare(getpassword, foundUser.password , function(err, result) {
+                    // res === true
+                    if (result === true){
+                        res.render("secrets");
+                    }
+                });
             }else{
                 res.send("user Not found");
             }
